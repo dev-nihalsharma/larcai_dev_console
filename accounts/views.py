@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 from django.contrib.auth import get_user_model
-
+from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import SignupSerializer
 from .utils import build_response
 
@@ -38,6 +38,13 @@ class RegisterAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        user = User.objects.filter(email=serializer.validated_data["email"]).first()
+        if user:
+            return Response(
+                build_response(False, "User already exists"),
+                status=status.HTTP_400_BAD_REQUEST,
+        )
+
         data = serializer.validated_data
         name_parts = data["fullName"].strip().split()
         first_name = name_parts[0]
@@ -46,10 +53,14 @@ class RegisterAPIView(APIView):
         user = User.objects.create_user(
             email=data["email"],
             password=data["password"],
-            username=(data["email"].split("@")[0] or None),
             first_name=first_name,
             last_name=last_name,
         )
+
+        refresh_token = RefreshToken.for_user(user)
+        access_token = refresh_token.access_token
+        refresh_token = str(refresh_token)
+        access_token = str(access_token)
 
         return Response(
             build_response(
@@ -58,8 +69,11 @@ class RegisterAPIView(APIView):
                 data={
                     "id": user.id,
                     "email": user.email,
-                    "username": user.username,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
                 },
+                refresh=refresh_token,
+                access=access_token,
             ),
             status=status.HTTP_201_CREATED,
         )
